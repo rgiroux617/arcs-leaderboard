@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Arcs · Live Leaderboard</title>
+<style>
+/* =========================================================================
+   LOOK & FEEL  —  everything visual lives here. Tweak freely.
+   ========================================================================= */
+:root{
+  /* ---- surfaces / background ---- */
+  --bg:            #0a0e1c;   /* page background (deep space) */
+  --panel:         #141a30;   /* rows & top strip */
+  --panel-hi:      #1b2340;   /* highlighted / leader row */
+  --border:        rgba(255,255,255,.09);
+  --border-strong: rgba(255,255,255,.20);
+
+  /* ---- text ---- */
+  --text:    #eaedf7;   /* primary numbers & names */
+  --muted:   #8891b4;   /* labels & secondary text */
+  --faint:   #5a628a;   /* undeclared / disabled */
+
+  /* ---- resource accent colours ---- */
+  --c-material: #ffc825;  
+  --c-fuel:     #8e6b2e;   
+  --c-relic:    #90cad6;   
+  --c-psionic:  #ec63a9;   
+
+  /* ---- feedback colours ---- */
+  --win:    #ff5555;   /* score turns this colour once it can end the game */
+  --gold:   #f4c840;   /* rank #1 accent */
+  --accent: #4a86e8;   /* declared-ambition chips, active controls */
+  --flip:   #e8843c;   /* declared chip when its marker has flipped to the orange side */
+  --sub-color: #f4c840;   /* the "+N" ambition line under the score */
+
+  /* ---- type scale  (plain pixels on the fixed 1180×820 canvas) ---- */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fs-score:  92px;   /* the big live score */
+  --fs-name:   50px;
+  --fs-stat:   40px;   /* resource / captive / trophy numbers */
+  --fs-label:  17px;
+  --fs-strip:  26px;   /* top strip text (labels like CHAPTER / INITIATIVE) */
+  --fs-sub:    46px;   /* the "+N" ambition line under the score */
+
+  /* fun, bold title (Apple systems have Marker Felt / Chalkboard SE; swap freely) */
+  --title-font: "Marker Felt", "Chalkboard SE", "Comic Sans MS", system-ui, sans-serif;
+  --fs-title:   38px;
+  --fs-chapter: 44px;  /* the big chapter number */
+  --fs-chip:    20px;  /* ambition button text */
+  --chip-w:     138px; /* every ambition button is this wide (uniform) */
+  --dot-size:   28px;  /* initiative circles */
+
+  /* ---- layout knobs ---- */
+  --name-w:   175px;   /* fixed name column -> keeps every score aligned */
+  --score-w:  120px;   /* fixed score column */
+  --stat-w:   80px;    /* width of each stat column */
+
+  /* ---- resource icons + number boxes (the new banner-style display) ---- */
+  --icon-h:      36px;   /* height of each white resource icon */
+  --box-w:       52px;   /* width of a number box */
+  --res-gap:     26px;   /* gap between resource columns */
+  --pair-gap:    8px;    /* tighter gap between Fuel and Material (they share Tycoon) */
+  --city-h:      44px;   /* size of the +2 / +3 city badges */
+  --divider-op:  0.45;   /* the white line between icons and number boxes */
+
+  /* fade when a player has NONE of an item (icon + box + number nearly vanish) */
+  --icon-op-full:  1;     --icon-op-empty:  0.12;
+  --box-op-full:   0.15;  --box-op-empty:   0.03;
+  --num-op-full:   1;     --num-op-empty:   0.22;
+  --city-op-on:    1;     --city-op-off:    0.22;
+
+  --row-tint: 26%;     /* how strongly each row takes its player colour (0%–100%) */
+  --img-dark: 0.35;    /* darkening over a banner image, 0 (bright) – 1 (black) */
+
+  /* ---- spacing / shape ---- */
+  --radius:   14px;
+  --radius-sm: 9px;
+  --gap:      10px;    /* gap between rows */
+  --pad-row:  16px;
+  --stat-gap: 6px;     /* gap between stat columns */
+  --btn:      46px;    /* +/- button size */
+}
+
+/* ---- reset ---- */
+*{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; }
+body{
+  background:var(--bg); color:var(--text); font-family:var(--font);
+  overflow:hidden; user-select:none;
+  font-variant-numeric:tabular-nums;
+}
+
+/* =========================================================================
+   LAYOUT  —  a fixed 1180×820 canvas (#stage) scaled by JS to fit any screen,
+   so the iPad and any desktop window show the identical layout.
+   ========================================================================= */
+#viewport{ position:fixed; inset:0; overflow:hidden; display:grid; place-items:center; background:var(--bg); }
+#stage{
+  width:1180px; height:820px; flex:0 0 auto;
+  display:flex; flex-direction:column; padding:10px; gap:8px;
+  transform-origin:center center;   /* JS sets scale() to fill the screen */
+}
+
+/* --- TOP BAR: fun white title, with Export / New game pinned right --- */
+#flavorTop{
+  position:relative; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+  padding:2px 8px; min-height:calc(var(--fs-title) + 8px);
+}
+.title{
+  font-family:var(--title-font); font-size:var(--fs-title); font-weight:700;
+  color:#fff; letter-spacing:.01em; line-height:1; text-align:center;
+}
+#topButtons{ position:absolute; right:4px; top:50%; transform:translateY(-50%); display:flex; gap:8px; }
+#topButtons .btn{ padding:5px 12px; font-size:16px; }   /* smaller to fit the title row */
+
+/* --- CONTROLS strip: chapter · initiative · ambitions (right-justified) --- */
+#controls{
+  flex:0 0 auto; display:flex; align-items:center; gap:16px; flex-wrap:nowrap;
+  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+  padding:10px 16px; font-size:var(--fs-strip);
+}
+.ctrl-group{ display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+.ctrl-label{ color:var(--muted); font-size:16px; text-transform:uppercase; letter-spacing:.08em; }
+.chapter-val{
+  font-size:var(--fs-chapter); font-weight:700; min-width:70px; text-align:center;
+  color:var(--text); cursor:pointer; padding:2px 8px; border-radius:8px; line-height:1;
+  white-space:nowrap;
+}
+.chapter-val:hover{ background:rgba(255,255,255,.05); }
+.chapter-stepper{ display:flex; align-items:center; gap:8px; }
+
+/* small round control buttons (chapter +/-, etc.) */
+.mini{
+  width:30px; height:30px; border-radius:8px; border:1px solid var(--border-strong);
+  background:transparent; color:var(--text); font-size:18px; line-height:1; cursor:pointer;
+  display:grid; place-items:center;
+}
+.mini:active{ transform:scale(.94); }
+
+/* initiative colour dots */
+.init-dots{ display:flex; gap:8px; }
+.init-dot{
+  width:var(--dot-size); height:var(--dot-size); border-radius:50%; cursor:pointer;
+  border:2px solid transparent; opacity:.45; transition:opacity .12s, border-color .12s;
+}
+.init-dot.on{ opacity:1; border-color:var(--text); }
+
+/* ambition chips — all one width, pushed to the right */
+.amb-chips{ display:flex; gap:8px; margin-left:auto; }
+.chip{
+  width:var(--chip-w); text-align:center; padding:8px 6px; border-radius:22px; cursor:pointer;
+  font-size:var(--fs-chip); border:1px solid var(--border); color:var(--faint);
+  background:transparent; white-space:nowrap; transition:all .12s;
+}
+.chip.declared{ color:#fff; background:var(--accent); border-color:var(--accent); }
+.chip.declared.flipped{ background:var(--flip); border-color:var(--flip); }
+.chip .val{ opacity:.85; margin-left:5px; font-weight:600; }
+
+/* right-side action buttons */
+.spacer{ flex:1 1 auto; }
+.btn{
+  padding:7px 13px; border-radius:var(--radius-sm); border:1px solid var(--border-strong);
+  background:transparent; color:var(--muted); font-size:var(--fs-label); cursor:pointer;
+}
+.btn:hover{ color:var(--text); border-color:var(--text); }
+.btn:active{ transform:scale(.97); }
+
+/* --- ROWS container --- */
+#rows{ flex:1 1 auto; display:flex; flex-direction:column; gap:var(--gap); min-height:0; }
+
+.row{
+  flex:1 1 0; min-height:0; display:flex; align-items:center; gap:20px;
+  /* each row is tinted with its own player colour (--pc, set inline) */
+  background-color:color-mix(in srgb, var(--pc) var(--row-tint), var(--panel));
+  border:1px solid var(--border); border-radius:var(--radius);
+  padding:0 22px;
+  transition:background .18s, border-color .18s;
+  overflow:hidden;                       /* keep a banner image inside the rounded corners */
+}
+/* optional banner image: set img:"..." in the player config. The colour above
+   stays as a fallback if the image is missing; --img-dark darkens for readability. */
+.row.has-img{
+  background-image:
+    linear-gradient(rgba(8,10,20,var(--img-dark)), rgba(8,10,20,var(--img-dark))),
+    var(--img);
+  background-size:cover; background-position:center; background-repeat:no-repeat;
+}
+.row.leader{ border-color:var(--gold); }
+
+/* rank + name block */
+.rank{ font-size:var(--fs-name); font-weight:700; color:var(--muted); width:1.4em; text-align:center; flex:0 0 auto; }
+.row.leader .rank{ color:var(--gold); }
+/* name block (player name + optional small leader tag beneath) */
+.name-block{ width:var(--name-w); flex:0 0 auto; display:flex; flex-direction:column; justify-content:center; }
+.pname{
+  font-size:var(--fs-name); font-weight:600;
+  width:100%;
+  cursor:text; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.leader-tag{ font-size:22px; color:var(--muted); margin-top:2px; white-space:nowrap; }
+.pname input{
+  font:inherit; color:var(--text); background:transparent;
+  border:none; border-bottom:1px solid var(--accent); width:100%; outline:none;
+}
+/* asterisk over a resource a special leader scores reduced points for */
+.lead-star{ color:var(--flip); font-size:0.9em; font-weight:800; margin-left:1px; }
+
+/* live score block */
+.score-wrap{ display:flex; flex-direction:column; width:var(--score-w); flex:0 0 auto; }
+.score{ font-size:var(--fs-score); font-weight:700; line-height:1; }
+.score.over{ color:var(--win); }
+.score-sub{ font-size:var(--fs-sub); font-weight:600; color:var(--sub-color); margin-top:3px; line-height:1; }
+
+/* leader picker (shown in the score area during New-game setup) */
+.score-wrap.setup{ width:auto; min-width:230px; gap:8px; }
+.leader-opt{
+  display:flex; align-items:center; gap:10px; cursor:pointer;
+  font-size:24px; color:var(--muted); white-space:nowrap;
+}
+.leader-opt .lbox{
+  width:1.1em; height:1.1em; flex:0 0 auto; border-radius:5px;
+  border:2px solid var(--border-strong); background:transparent;
+}
+.leader-opt.on{ color:var(--text); }
+.leader-opt.on .lbox{ background:var(--gold); border-color:var(--gold); }
+
+/* stat cluster */
+.stats{ display:flex; align-items:center; gap:20px; flex-wrap:nowrap; margin-left:auto; }
+
+/* one stat = white icon on top, translucent number box below */
+.stat{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; flex:0 0 auto; }
+.sicon{ height:var(--icon-h); width:auto; display:block; opacity:var(--icon-op-full); }
+.sbox{
+  min-width:var(--box-w); height:calc(var(--fs-stat) + 10px); padding:0 6px; border-radius:7px;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,var(--box-op-full));
+}
+.snum{ font-size:var(--fs-stat); font-weight:600; cursor:pointer; opacity:var(--num-op-full); }
+
+/* fade a resource that the player has none of */
+.stat.empty .sicon{ opacity:var(--icon-op-empty); }
+.stat.empty .sbox{ background:rgba(255,255,255,var(--box-op-empty)); }
+.stat.empty .snum{ opacity:var(--num-op-empty); }
+
+/* Fuel + Material sit close together (they combine for Tycoon) */
+.pair{ display:flex; align-items:center; gap:var(--pair-gap); }
+
+/* the resource group + the white divider between icons and boxes */
+.resgroup{ position:relative; display:flex; align-items:center; gap:var(--res-gap); }
+.resgroup::before{
+  content:""; position:absolute; left:0; right:0; top:calc(var(--icon-h) + 4px); height:2px;
+  background:rgba(255,255,255,var(--divider-op)); pointer-events:none;
+}
+.stat.power-col{ margin-right:6px; }
+
+/* leader asterisk over a reduced-scoring icon */
+.lead-star{ position:absolute; top:-2px; right:6px; color:var(--flip); font-size:20px; font-weight:800; }
+
+/* the stepper (revealed state) — sits inside the number box */
+.stepper{ display:flex; align-items:center; justify-content:center; }
+.stepper button{
+  width:26px; height:26px; border-radius:7px; border:1px solid var(--border-strong);
+  background:var(--panel); color:var(--text); font-size:18px; line-height:1; cursor:pointer;
+  display:grid; place-items:center; flex:0 0 auto; position:relative; z-index:1;
+}
+.stepper button:active{ transform:scale(.9); background:rgba(255,255,255,.08); }
+.stat .stepper .snum{
+  font-size:28px; min-width:auto; margin:0 -8px; padding:0;
+  text-align:center; position:relative; z-index:2; cursor:pointer;
+}
+
+/* +2 / +3 city bonus badges (stacked at the far right) */
+.city-badges{ display:flex; flex-direction:column; align-items:center; gap:6px; margin-left:4px; }
+.city-badge{ height:var(--city-h); width:auto; cursor:pointer; opacity:var(--city-op-off); transition:opacity .12s; }
+.city-badge.on{ opacity:var(--city-op-on); }
+</style>
+</head>
+<body>
+<div id="viewport">
+  <div id="stage">
+    <!-- reserved for later flavor/art -->
+    <div id="flavorTop">
+      <span class="title">Arcs - Tale of the Fuckin Tape!</span>
+      <div id="topButtons"></div>
+    </div>
+
+    <div id="controls"></div>
+    <div id="rows"></div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIG  —  edit these two blocks to match your game.
+   ========================================================================= */
+
+/* --- your players (names are also editable on-screen by clicking them) --- */
+const PLAYERS = [
+  /* img: optional banner image. Leave "" for the solid colour, or set a filename
+     ("blue.png", sitting next to this html file) or a data: URI to use a picture. */
+  { id:"p1", name:"Blue",   color:"#3b82f6", img:"" },
+  { id:"p2", name:"Red",    color:"#ef4444", img:"" },
+  { id:"p3", name:"Yellow", color:"#eab308", img:"" },
+  { id:"p4", name:"White",  color:"#e5e7eb", img:"" },
+];
+
+/* --- leaders that change scoring (checked per player on New game) ---
+   Elder/Warrior/Archivist cap their own ambition: if that player is in FIRST
+   for it, they score only 2nd-place points and get no city bonus; if in SECOND,
+   they score nothing.  Noble scores on ANY ambition only when solo first.       */
+const LEADERS = [
+  { id:"elder",     name:"Elder",     ambition:"tyrant" },
+  { id:"warrior",   name:"Warrior",   ambition:"empath" },
+  { id:"archivist", name:"Archivist", ambition:"tycoon" },
+  { id:"noble",     name:"Noble",     ambition:"*"      },  /* * = all ambitions */
+];
+
+/* --- the three ambition markers ---
+   Each marker starts on its LOW side; at each chapter's cleanup the lowest
+   un-flipped marker flips to its HIGH side (so by chapter 4 all are high).
+   When you declare an ambition, it takes the highest marker still available
+   that chapter.  Values are  { first, second }  =  1st place / 2nd place power.  */
+const MARKERS = [
+  { low:{first:5, second:3}, high:{first:9, second:4} },
+  { low:{first:3, second:2}, high:{first:6, second:3} },
+  { low:{first:2, second:0}, high:{first:4, second:2} },
+];
+
+/* --- power that ENDS the game (score turns red at/above this) --- */
+const WIN_THRESHOLD = { 2:33, 3:30, 4:27 };   /* keyed by player count */
+
+/* --- the five ambitions and what each counts --- */
+const AMBITIONS = [
+  { id:"tycoon",  name:"Tycoon",  stat:"tycoon"   },  /* material + fuel icons */
+  { id:"tyrant",  name:"Tyrant",  stat:"captives" },
+  { id:"warlord", name:"Warlord", stat:"trophies" },
+  { id:"keeper",  name:"Keeper",  stat:"relic"    },
+  { id:"empath",  name:"Empath",  stat:"psionic"  },
+];
+
+/* editable resource stats shown per row (weapon is omitted — scores nothing in 4p) */
+const RES_STATS = ["material","fuel","relic","psionic"];   // (used only for the leader-asterisk lookup)
+const OTHER_STATS = ["captives","trophies"];
+
+/* icon art (white PNGs kept in the Arcs_Art folder next to this html) */
+const ART = "Arcs_Art/";
+const ICONS = {
+  power:"power.png",
+  fuel:"fuel.png", material:"material.png",
+  captives:"tyrant.png", trophies:"warlord.png",
+  relic:"keeper.png", psionic:"empath.png",
+  city2:"2_city_bonus.png", city3:"3_city_bonus.png",
+};
+/* order the resource icons appear, left→right (ambition order; Fuel+Material paired) */
+const RES_ORDER = ["fuel","material","captives","trophies","relic","psionic"];
+
+/* which stat column(s) each ambition scores from (Tycoon spans Material + Fuel) */
+const AMBITION_STATS = {
+  tycoon:["material","fuel"], tyrant:["captives"], warlord:["trophies"],
+  keeper:["relic"], empath:["psionic"],
+};
+/* true if this player's leader reduces scoring on this column (Noble has none yet) */
+function leaderStar(p, stat){
+  if(!p.leader) return false;
+  const L = LEADERS.find(x=>x.id===p.leader);
+  if(!L || L.ambition === "*") return false;
+  return (AMBITION_STATS[L.ambition] || []).includes(stat);
+}
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+const LS_KEY = "arcs_leaderboard_v1";
+
+function freshPlayers(){
+  return PLAYERS.map(p => ({
+    ...p, material:0, fuel:0, relic:0, psionic:0,
+    captives:0, trophies:0, power:0, city2:false, city3:false,
+    leader:null                       // which Leader this player holds (or null)
+  }));
+}
+
+let state = {
+  chapter: 1,
+  initiative: null,          // player id
+  players: freshPlayers(),
+  declared: {},              // ambitionId -> marker index (0..2), else absent
+  editing: null,             // {pid, stat} currently showing a stepper
+  editingName: null,         // pid whose name input is open
+  setup: false,              // true right after New game -> pick leaders
+  log: [],                   // array of snapshots
+};
+
+load();
+
+/* =========================================================================
+   MARKER / AMBITION LOGIC
+   ========================================================================= */
+
+/* how many markers are on their HIGH side this chapter (lowest-power first) */
+function flippedCount(chapter){ return Math.min(Math.max(chapter-1,0), MARKERS.length); }
+
+/* is a given marker on its high side this chapter? (flip order = lowest low.first first) */
+function isHigh(markerIdx, chapter){
+  const order = MARKERS.map((m,i)=>i).sort((a,b)=> MARKERS[a].low.first - MARKERS[b].low.first);
+  return order.indexOf(markerIdx) < flippedCount(chapter);
+}
+function markerValue(markerIdx){
+  const m = MARKERS[markerIdx];
+  return isHigh(markerIdx, state.chapter) ? m.high : m.low;
+}
+
+/* which markers are not yet placed in a declared ambition */
+function availableMarkers(){
+  const used = new Set(Object.values(state.declared));
+  return MARKERS.map((m,i)=>i).filter(i => !used.has(i));
+}
+
+/* declare / undeclare an ambition (takes the highest available marker) */
+function toggleAmbition(ambId){
+  if(ambId in state.declared){
+    delete state.declared[ambId];               // undeclare -> marker returns to pool
+  } else {
+    const avail = availableMarkers();
+    if(!avail.length) return;                    // all three markers already placed
+    avail.sort((a,b)=> markerValue(b).first - markerValue(a).first); // highest first
+    state.declared[ambId] = avail[0];
+  }
+  save(); render();
+}
+
+/* =========================================================================
+   SCORING
+   ========================================================================= */
+function statCount(p, stat){
+  if(stat==="tycoon") return p.material + p.fuel;   // Tycoon counts both
+  return p[stat] || 0;   // relic (Keeper), psionic (Empath), captives (Tyrant), trophies (Warlord)
+}
+
+/* points every player earns from ONE declared ambition, right now */
+function scoreOneAmbition(ambId){
+  const amb = AMBITIONS.find(a=>a.id===ambId);
+  const val = markerValue(state.declared[ambId]);        // {first, second}
+  const out = {};
+  const q = state.players
+    .map(p => ({ p, c: statCount(p, amb.stat) }))
+    .filter(x => x.c > 0);                                // must hold >=1 to qualify
+  if(!q.length) return out;
+
+  const max = Math.max(...q.map(x=>x.c));
+  const firsts = q.filter(x=>x.c===max);
+
+  if(firsts.length > 1){
+    firsts.forEach(x => out[x.p.id] = val.second);       // tie for 1st -> all get 2nd value
+  } else {
+    // solo first place (+ city bonus)
+    const w = firsts[0].p;
+    const bonus = (w.city2 && w.city3) ? 5 : (w.city2 ? 2 : 0);
+    out[w.id] = val.first + bonus;
+    // second place
+    const rest = q.filter(x=>x.c<max);
+    if(rest.length){
+      const max2 = Math.max(...rest.map(x=>x.c));
+      const seconds = rest.filter(x=>x.c===max2);
+      if(seconds.length===1) out[seconds[0].p.id] = val.second;  // tie for 2nd -> nobody
+    }
+  }
+
+  // ---- leader exceptions ----
+  state.players.forEach(p => {
+    if(!p.leader) return;
+    const L = LEADERS.find(x=>x.id===p.leader);
+    const c = statCount(p, amb.stat);
+    const inFirst   = c > 0 && c === max;
+    const soloFirst = inFirst && firsts.length === 1;
+
+    if(L.id === "noble"){
+      // Noble: only scores when solo first (on every ambition); otherwise nothing
+      if(!soloFirst) delete out[p.id];
+    } else if(L.ambition === amb.id){
+      // Elder/Warrior/Archivist on their own ambition: only SOLO first scores,
+      // and only 2nd-place points with no city bonus. A tie for first counts as
+      // second -> nothing; actual second or not placing -> nothing.
+      if(soloFirst) out[p.id] = val.second;
+      else delete out[p.id];
+    }
+  });
+
+  return out;
+}
+
+/* per player: ambition points and live score (power + ambitions) */
+function liveMap(){
+  const ambPts = {}; state.players.forEach(p=> ambPts[p.id]=0);
+  Object.keys(state.declared).forEach(ambId => {
+    const res = scoreOneAmbition(ambId);
+    for(const pid in res) ambPts[pid] += res[pid];
+  });
+  const m = {};
+  state.players.forEach(p => m[p.id] = { ambPts:ambPts[p.id], live:p.power + ambPts[p.id] });
+  return m;
+}
+
+/* ranked list of player ids (highest live first; ties -> earlier seat wins) */
+function sortedOrder(){
+  const m = liveMap();
+  return state.players
+    .map((p,i)=> ({ id:p.id, seat:i, live:m[p.id].live }))
+    .sort((a,b)=> b.live - a.live || a.seat - b.seat)
+    .map(x => x.id);
+}
+
+/* =========================================================================
+   RENDER
+   ========================================================================= */
+const $controls = document.getElementById("controls");
+const $rows     = document.getElementById("rows");
+const $top      = document.getElementById("topButtons");
+
+function render(){
+  renderControls();
+  renderRows();
+  focusNameIfEditing();
+}
+
+function renderControls(){
+  // Export + New game / Start live in the title row now
+  $top.innerHTML = `
+    <button class="btn" data-act="csv">Export</button>
+    ${state.setup
+      ? `<button class="btn" data-act="start">Start game</button>`
+      : `<button class="btn" data-act="reset">New game</button>`}
+  `;
+
+  const initDots = state.players.map(p =>
+    `<span class="init-dot ${state.initiative===p.id?'on':''}" data-act="init" data-pid="${p.id}"
+           style="background:${p.color}" title="${p.name} has initiative"></span>`
+  ).join("");
+
+  const chips = AMBITIONS.map(a=>{
+    const on = a.id in state.declared;
+    const v = on ? markerValue(state.declared[a.id]) : null;
+    const flipped = on && isHigh(state.declared[a.id], state.chapter);   // high side = orange token
+    return `<span class="chip ${on?'declared':''} ${flipped?'flipped':''}" data-act="amb" data-amb="${a.id}">
+              ${a.name}${on?`<span class="val">${v.first}/${v.second}</span>`:''}
+            </span>`;
+  }).join("");
+
+  // chapter: click the number to reveal −/+ (like the stat steppers)
+  const editingChap = state.editing && state.editing.chapter;
+  const chapterCtrl = editingChap
+    ? `<span class="chapter-stepper">
+         <button class="mini" data-act="chap" data-d="-1">−</button>
+         <span class="chapter-val" data-act="editchap">${state.chapter} / 5</span>
+         <button class="mini" data-act="chap" data-d="1">+</button>
+       </span>`
+    : `<span class="chapter-val" data-act="editchap">${state.chapter} / 5</span>`;
+
+  $controls.innerHTML = `
+    <div class="ctrl-group">
+      <span class="ctrl-label">Chapter</span>
+      ${chapterCtrl}
+    </div>
+    <div class="ctrl-group">
+      <span class="init-dots" title="Initiative">${initDots}</span>
+    </div>
+    <div class="ctrl-group amb-chips">${chips}</div>
+  `;
+}
+
+function statCell(p, stat){
+  const editing = state.editing && state.editing.pid===p.id && state.editing.stat===stat;
+  const star = leaderStar(p, stat) ? `<span class="lead-star">*</span>` : "";
+  const empty = (stat!=="power") && p[stat]===0;   // resources fade to almost nothing at 0
+  const inner = editing
+    ? `<div class="stepper">
+         <button data-act="dec" data-pid="${p.id}" data-stat="${stat}">−</button>
+         <span class="snum" data-act="edit" data-pid="${p.id}" data-stat="${stat}">${p[stat]}</span>
+         <button data-act="inc" data-pid="${p.id}" data-stat="${stat}">+</button>
+       </div>`
+    : `<span class="snum" data-act="edit" data-pid="${p.id}" data-stat="${stat}">${p[stat]}</span>`;
+  return `<div class="stat ${stat==='power'?'power-col':''} ${empty?'empty':''}" data-res="${stat}">
+            <img class="sicon" src="${ART}${ICONS[stat]}" alt="${stat}">${star}
+            <div class="sbox">${inner}</div>
+          </div>`;
+}
+
+function renderRows(){
+  const m = liveMap();
+  const threshold = WIN_THRESHOLD[state.players.length] ?? 27;
+
+  // Only re-sort when nothing is being edited — this keeps a row from sliding
+  // out from under the cursor while you're still clicking +/-.
+  if(!state.editing || !state.order) state.order = sortedOrder();
+
+  $rows.innerHTML = state.order.map((pid, i)=>{
+    const p = state.players.find(x=>x.id===pid);
+    const rank = i + 1;
+    const leaderName = p.leader ? (LEADERS.find(l=>l.id===p.leader)||{}).name : "";
+    const nameInner = state.editingName===p.id
+      ? `<span class="pname"><input id="nameInput" value="${p.name.replace(/"/g,'&quot;')}"></span>`
+      : `<span class="pname" data-act="editname" data-pid="${p.id}">${p.name}</span>`;
+    const nameCell = `<div class="name-block">
+        ${nameInner}
+        ${leaderName ? `<span class="leader-tag">${leaderName}</span>` : ""}
+      </div>`;
+
+    const powerCell = statCell(p, "power");                 // Power sits first (never fades)
+    const pair = `<div class="pair">${statCell(p,"fuel")}${statCell(p,"material")}</div>`;
+    const restCells = ["captives","trophies","relic","psionic"].map(s=>statCell(p,s)).join("");
+
+    const rowStyle = `--pc:${p.color}${p.img?`;--img:url('${p.img}')`:''}`;
+    const imgClass = p.img ? "has-img" : "";
+
+    const scoreBlock = state.setup
+      ? `<div class="score-wrap setup">
+           ${LEADERS.map(L=>`
+             <span class="leader-opt ${p.leader===L.id?'on':''}" data-act="leader" data-pid="${p.id}" data-leader="${L.id}">
+               <span class="lbox"></span>${L.name}
+             </span>`).join("")}
+         </div>`
+      : `<div class="score-wrap">
+           <span class="score ${m[p.id].live>=threshold?'over':''}">${m[p.id].live}</span>
+           <span class="score-sub">${m[p.id].ambPts?`+${m[p.id].ambPts} `:''}</span>
+         </div>`;
+
+    const cityBadge = (slot)=>`<img class="city-badge ${p[slot]?'on':''}" data-act="city"
+        data-pid="${p.id}" data-slot="${slot}" src="${ART}${ICONS[slot]}" alt="${slot}">`;
+
+    const statsBlock = state.setup ? "" : `
+        <div class="stats">
+          ${powerCell}
+          <div class="resgroup">
+            ${pair}
+            ${restCells}
+          </div>
+          <div class="city-badges">
+            ${cityBadge("city2")}
+            ${cityBadge("city3")}
+          </div>
+        </div>`;
+
+    return `
+      <div class="row ${(rank===1 && !state.setup)?'leader':''} ${imgClass}" style="${rowStyle}">
+        <span class="rank">${rank}</span>
+        ${nameCell}
+        ${scoreBlock}
+        ${statsBlock}
+      </div>`;
+  }).join("");
+}
+
+function focusNameIfEditing(){
+  if(!state.editingName) return;
+  const inp = document.getElementById("nameInput");
+  if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
+
+/* =========================================================================
+   EVENTS  (one delegated click handler + a couple of specifics)
+   ========================================================================= */
+document.addEventListener("click", e=>{
+  const t = e.target.closest("[data-act]");
+  const act = t ? t.dataset.act : null;
+
+  // Re-sort only when the click lands OUTSIDE the steppers (not on +/- and not on
+  // another number). This lets you keep adjusting values without the row sliding away.
+  if(state.editing && act!=="inc" && act!=="dec" && act!=="edit" && act!=="chap" && act!=="editchap"){ closeEdit(); }
+  if(!t){ render(); return; }
+
+  const pid  = t.dataset.pid;
+  const stat = t.dataset.stat;
+  const P    = id => state.players.find(x=>x.id===id);
+
+  switch(act){
+    case "chap":
+      changeChapter(parseInt(t.dataset.d,10)); return;   // keeps the chapter stepper open
+    case "editchap":
+      // toggle the chapter's −/+ (like clicking a stat number)
+      state.editing = (state.editing && state.editing.chapter) ? null : { chapter:true };
+      render(); return;
+    case "init":
+      state.initiative = pid; snapshot("initiative"); render(); return;   // log on initiative
+    case "amb":
+      toggleAmbition(t.dataset.amb); return;
+    case "edit":
+      // toggle: click the same number again to close, else open it (order stays frozen)
+      state.editing = (state.editing && state.editing.pid===pid && state.editing.stat===stat)
+        ? null : { pid, stat };
+      render(); return;
+    case "inc":
+      P(pid)[stat]++; save(); render(); return;             // row stays put while editing
+    case "dec":
+      P(pid)[stat] = Math.max(0, P(pid)[stat]-1); save(); render(); return;
+    case "editname":
+      state.editingName = pid; render(); return;
+    case "leader": {                                  // single-select per player (click again to clear)
+      const lp = P(pid);
+      lp.leader = (lp.leader === t.dataset.leader) ? null : t.dataset.leader;
+      save(); render(); return;
+    }
+    case "city":                                      // toggle a city bonus badge
+      P(pid)[t.dataset.slot] = !P(pid)[t.dataset.slot];
+      save(); render(); return;
+    case "start":                                     // leave setup, begin the game
+      state.setup = false; state.order = sortedOrder(); save(); render(); return;
+    case "csv":  exportCSV();  return;
+    case "reset": resetGame(); return;
+  }
+  render();
+});
+
+// close the open stepper AND unfreeze the sort order
+function closeEdit(){ state.editing = null; state.order = sortedOrder(); }
+
+// commit name edit on Enter / blur
+document.addEventListener("keydown", e=>{
+  if(e.target.id==="nameInput" && e.key==="Enter"){ e.target.blur(); }
+});
+document.addEventListener("blur", e=>{
+  if(e.target.id!=="nameInput") return;
+  const p = state.players.find(x=>x.id===state.editingName);
+  if(p) p.name = e.target.value.trim() || p.name;
+  state.editingName = null; save(); render();
+}, true);
+
+function changeChapter(d){
+  const next = Math.min(5, Math.max(1, state.chapter + d));
+  if(d>0 && next!==state.chapter){
+    snapshot("chapter-end");                 // record the chapter's final standings
+    const m = liveMap();                     // bank scored ambition points into power
+    state.players.forEach(p => p.power += m[p.id].ambPts);
+    // cleanup: scored Warlord returns all Trophies; scored Tyrant returns all Captives
+    if("warlord" in state.declared) state.players.forEach(p => p.trophies = 0);
+    if("tyrant"  in state.declared) state.players.forEach(p => p.captives = 0);
+    state.declared = {};                     // markers reset each new chapter
+    state.order = sortedOrder();
+  }
+  state.chapter = next; save(); render();
+}
+
+/* =========================================================================
+   LOGGING  /  EXPORT
+   ========================================================================= */
+function snapshot(trigger){
+  const m = liveMap();
+  const rankById = {}; sortedOrder().forEach((id,i)=> rankById[id]=i+1);
+  const declaredStr = Object.keys(state.declared).map(id=>{
+    const v = markerValue(state.declared[id]); return `${id} ${v.first}/${v.second}`;
+  }).join("; ");
+
+  const rows = state.players.map(p=>({
+    time: new Date().toISOString(), trigger, chapter: state.chapter,
+    initiative: state.initiative || "", declared: declaredStr,
+    player: p.name, color: p.color, leader: p.leader || "",
+    material:p.material, fuel:p.fuel, relic:p.relic, psionic:p.psionic,
+    captives:p.captives, trophies:p.trophies, power:p.power,
+    tycoon_count: p.material+p.fuel, keeper_count:p.relic, empath_count:p.psionic,
+    tyrant_count:p.captives, warlord_count:p.trophies,
+    city2:p.city2, city3:p.city3,
+    ambition_points: m[p.id].ambPts, live_score: m[p.id].live, rank: rankById[p.id],
+  }));
+  state.log.push({ time:new Date().toISOString(), trigger, rows });
+  save();
+}
+
+function exportRows(){
+  // flatten every snapshot to one row per player
+  const flat = [];
+  state.log.forEach(s => s.rows.forEach(r => flat.push(r)));
+  return flat;
+}
+
+function download(filename, text, type){
+  const blob = new Blob([text], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
+
+function exportCSV(){
+  const flat = exportRows();
+  if(!flat.length){ snapshot("manual"); return exportCSV(); }
+  const cols = Object.keys(flat[0]);
+  const esc = v => `"${String(v).replace(/"/g,'""')}"`;
+  const csv = [cols.join(",")].concat(
+    flat.map(r => cols.map(c=>esc(r[c])).join(","))
+  ).join("\n");
+  download(`arcs_log_${stamp()}.csv`, csv, "text/csv");
+}
+
+function stamp(){ return new Date().toISOString().replace(/[:.]/g,"-").slice(0,19); }
+
+/* =========================================================================
+   PERSISTENCE  (survives a reload; wrapped so it can't crash a preview)
+   ========================================================================= */
+function save(){
+  try{
+    const { editing, editingName, ...persist } = state;
+    localStorage.setItem(LS_KEY, JSON.stringify(persist));
+  }catch(_){}
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){ Object.assign(state, JSON.parse(raw), { editing:null, editingName:null }); }
+  }catch(_){}
+}
+function resetGame(){
+  if(!confirm("Start a new game? This clears all counts and the log.")) return;
+  state = { chapter:1, initiative:null, players:freshPlayers(),
+            declared:{}, editing:null, editingName:null, setup:true, log:[] };
+  state.order = sortedOrder();
+  save(); render();
+}
+
+/* =========================================================================
+   FIT TO SCREEN  —  scale the fixed 1180×820 stage to fill the real viewport.
+   This is what makes the iPad and any desktop window look identical.
+   ========================================================================= */
+const STAGE_W = 1180, STAGE_H = 820;
+function fitStage(){
+  const vw = (window.visualViewport && window.visualViewport.width)  || window.innerWidth;
+  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  const s = Math.min(vw / STAGE_W, vh / STAGE_H);
+  document.getElementById("stage").style.transform = `scale(${s})`;
+}
+window.addEventListener("resize", fitStage);
+window.addEventListener("orientationchange", fitStage);
+if(window.visualViewport) window.visualViewport.addEventListener("resize", fitStage);
+
+/* go */
+render();
+fitStage();
+</script>
+</body>
+</html>
