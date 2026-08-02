@@ -34,26 +34,52 @@
   --flip:   #e8843c;   /* declared chip when its marker has flipped to the orange side */
   --sub-color: #f4c840;   /* the "+N" ambition line under the score */
 
-  /* ---- type scale  (bump any of these to fill more space) ---- */
+  /* ---- type scale  (plain pixels on the fixed 1180×820 canvas) ---- */
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --fs-score:  clamp(46px, 12.0vh, 300px);   /* the big live score */
-  --fs-name:   clamp(24px, 12vh, 100px);
-  --fs-stat:   clamp(28px, 12vh, 64px);   /* resource / captive / trophy numbers */
-  --fs-label:  clamp(13px, 12vh, 34px);
-  --fs-strip:  clamp(15px, 12vh, 60px);   /* top strip text */
-  --fs-sub:    clamp(30px, 8vh, 140px);   /* the "+N" ambition line under the score */
+  --fs-score:  92px;   /* the big live score */
+  --fs-name:   50px;
+  --fs-stat:   40px;   /* resource / captive / trophy numbers */
+  --fs-label:  17px;
+  --fs-strip:  26px;   /* top strip text (labels like CHAPTER / INITIATIVE) */
+  --fs-sub:    46px;   /* the "+N" ambition line under the score */
+
+  /* fun, bold title (Apple systems have Marker Felt / Chalkboard SE; swap freely) */
+  --title-font: "Marker Felt", "Chalkboard SE", "Comic Sans MS", system-ui, sans-serif;
+  --fs-title:   38px;
+  --fs-chapter: 44px;  /* the big chapter number */
+  --fs-chip:    20px;  /* ambition button text */
+  --chip-w:     138px; /* every ambition button is this wide (uniform) */
+  --dot-size:   28px;  /* initiative circles */
 
   /* ---- layout knobs ---- */
-  --name-w:   clamp(96px, 16vw, 390px);  /* fixed name column -> keeps every score aligned */
-  --row-tint: 36%;                       /* how strongly each row takes its player colour (0%–100%) */
-  --img-dark: 0.15;                      /* darkening over a banner image, 0 (bright) – 1 (black) */
+  --name-w:   175px;   /* fixed name column -> keeps every score aligned */
+  --score-w:  120px;   /* fixed score column */
+  --stat-w:   80px;    /* width of each stat column */
+
+  /* ---- resource icons + number boxes (the new banner-style display) ---- */
+  --icon-h:      36px;   /* height of each white resource icon */
+  --box-w:       52px;   /* width of a number box */
+  --res-gap:     26px;   /* gap between resource columns */
+  --pair-gap:    8px;    /* tighter gap between Fuel and Material (they share Tycoon) */
+  --city-h:      44px;   /* size of the +2 / +3 city badges */
+  --divider-op:  0.45;   /* the white line between icons and number boxes */
+
+  /* fade when a player has NONE of an item (icon + box + number nearly vanish) */
+  --icon-op-full:  1;     --icon-op-empty:  0.12;
+  --box-op-full:   0.15;  --box-op-empty:   0.03;
+  --num-op-full:   1;     --num-op-empty:   0.22;
+  --city-op-on:    1;     --city-op-off:    0.22;
+
+  --row-tint: 26%;     /* how strongly each row takes its player colour (0%–100%) */
+  --img-dark: 0.35;    /* darkening over a banner image, 0 (bright) – 1 (black) */
 
   /* ---- spacing / shape ---- */
   --radius:   14px;
   --radius-sm: 9px;
-  --gap:      10px;                 /* gap between rows */
-  --pad-row:  clamp(10px, 1.6vh, 20px);
-  --btn:      clamp(38px, 5.2vh, 52px);  /* +/- button size */
+  --gap:      10px;    /* gap between rows */
+  --pad-row:  16px;
+  --stat-gap: 6px;     /* gap between stat columns */
+  --btn:      46px;    /* +/- button size */
 }
 
 /* ---- reset ---- */
@@ -66,27 +92,43 @@ body{
 }
 
 /* =========================================================================
-   LAYOUT  —  full-height column: [top flavor][controls][rows][bottom flavor]
+   LAYOUT  —  a fixed 1180×820 canvas (#stage) scaled by JS to fit any screen,
+   so the iPad and any desktop window show the identical layout.
    ========================================================================= */
-#app{ height:100dvh; display:flex; flex-direction:column; padding:10px; gap:8px; }
+#viewport{ position:fixed; inset:0; overflow:hidden; display:grid; place-items:center; background:var(--bg); }
+#stage{
+  width:1180px; height:820px; flex:0 0 auto;
+  display:flex; flex-direction:column; padding:10px; gap:8px;
+  transform-origin:center center;   /* JS sets scale() to fill the screen */
+}
 
-/* --- reserved TOP flavor bar (add art / title later) --- */
+/* --- TOP BAR: fun white title, with Export / New game pinned right --- */
 #flavorTop{
-  flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:12px;
-  padding:2px 8px; color:var(--muted); letter-spacing:.14em; font-size:var(--fs-label);
-  text-transform:uppercase;
+  position:relative; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+  padding:2px 8px; min-height:calc(var(--fs-title) + 8px);
 }
-#flavorTop .dot{ width:6px;height:6px;border-radius:50%;background:var(--accent); }
+.title{
+  font-family:var(--title-font); font-size:var(--fs-title); font-weight:700;
+  color:#fff; letter-spacing:.01em; line-height:1; text-align:center;
+}
+#topButtons{ position:absolute; right:4px; top:50%; transform:translateY(-50%); display:flex; gap:8px; }
+#topButtons .btn{ padding:5px 12px; font-size:16px; }   /* smaller to fit the title row */
 
-/* --- CONTROLS strip: chapter · initiative · ambitions · buttons --- */
+/* --- CONTROLS strip: chapter · initiative · ambitions (right-justified) --- */
 #controls{
-  flex:0 0 auto; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  flex:0 0 auto; display:flex; align-items:center; gap:16px; flex-wrap:nowrap;
   background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
-  padding:8px 14px; font-size:var(--fs-strip);
+  padding:10px 16px; font-size:var(--fs-strip);
 }
-.ctrl-group{ display:flex; align-items:center; gap:8px; }
-.ctrl-label{ color:var(--muted); font-size:var(--fs-label); text-transform:uppercase; letter-spacing:.08em; }
-.chapter-val{ font-size:var(--fs-strip); font-weight:600; min-width:38px; text-align:center; }
+.ctrl-group{ display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+.ctrl-label{ color:var(--muted); font-size:16px; text-transform:uppercase; letter-spacing:.08em; }
+.chapter-val{
+  font-size:var(--fs-chapter); font-weight:700; min-width:70px; text-align:center;
+  color:var(--text); cursor:pointer; padding:2px 8px; border-radius:8px; line-height:1;
+  white-space:nowrap;
+}
+.chapter-val:hover{ background:rgba(255,255,255,.05); }
+.chapter-stepper{ display:flex; align-items:center; gap:8px; }
 
 /* small round control buttons (chapter +/-, etc.) */
 .mini{
@@ -97,19 +139,19 @@ body{
 .mini:active{ transform:scale(.94); }
 
 /* initiative colour dots */
-.init-dots{ display:flex; gap:7px; }
+.init-dots{ display:flex; gap:8px; }
 .init-dot{
-  width:24px; height:24px; border-radius:50%; cursor:pointer;
+  width:var(--dot-size); height:var(--dot-size); border-radius:50%; cursor:pointer;
   border:2px solid transparent; opacity:.45; transition:opacity .12s, border-color .12s;
 }
 .init-dot.on{ opacity:1; border-color:var(--text); }
 
-/* ambition chips */
-.amb-chips{ display:flex; gap:7px; flex-wrap:wrap; }
+/* ambition chips — all one width, pushed to the right */
+.amb-chips{ display:flex; gap:8px; margin-left:auto; }
 .chip{
-  padding:5px 11px; border-radius:20px; cursor:pointer; font-size:var(--fs-label);
-  border:1px solid var(--border); color:var(--faint); background:transparent; white-space:nowrap;
-  transition:all .12s;
+  width:var(--chip-w); text-align:center; padding:8px 6px; border-radius:22px; cursor:pointer;
+  font-size:var(--fs-chip); border:1px solid var(--border); color:var(--faint);
+  background:transparent; white-space:nowrap; transition:all .12s;
 }
 .chip.declared{ color:#fff; background:var(--accent); border-color:var(--accent); }
 .chip.declared.flipped{ background:var(--flip); border-color:var(--flip); }
@@ -128,11 +170,11 @@ body{
 #rows{ flex:1 1 auto; display:flex; flex-direction:column; gap:var(--gap); min-height:0; }
 
 .row{
-  flex:1 1 0; min-height:0; display:flex; align-items:center; gap:clamp(12px,1.8vw,30px);
+  flex:1 1 0; min-height:0; display:flex; align-items:center; gap:20px;
   /* each row is tinted with its own player colour (--pc, set inline) */
   background-color:color-mix(in srgb, var(--pc) var(--row-tint), var(--panel));
   border:1px solid var(--border); border-radius:var(--radius);
-  padding:0 clamp(16px,2vw,30px);
+  padding:0 22px;
   transition:background .18s, border-color .18s;
   overflow:hidden;                       /* keep a banner image inside the rounded corners */
 }
@@ -156,7 +198,7 @@ body{
   width:100%;
   cursor:text; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.leader-tag{ font-size:clamp(12px,2.2vh,22px); color:var(--muted); margin-top:2px; white-space:nowrap; }
+.leader-tag{ font-size:22px; color:var(--muted); margin-top:2px; white-space:nowrap; }
 .pname input{
   font:inherit; color:var(--text); background:transparent;
   border:none; border-bottom:1px solid var(--accent); width:100%; outline:none;
@@ -165,16 +207,16 @@ body{
 .lead-star{ color:var(--flip); font-size:0.9em; font-weight:800; margin-left:1px; }
 
 /* live score block */
-.score-wrap{ display:flex; flex-direction:column; width:clamp(96px,9vw,150px); flex:0 0 auto; }
+.score-wrap{ display:flex; flex-direction:column; width:var(--score-w); flex:0 0 auto; }
 .score{ font-size:var(--fs-score); font-weight:700; line-height:1; }
 .score.over{ color:var(--win); }
 .score-sub{ font-size:var(--fs-sub); font-weight:600; color:var(--sub-color); margin-top:3px; line-height:1; }
 
 /* leader picker (shown in the score area during New-game setup) */
-.score-wrap.setup{ width:auto; min-width:clamp(150px,18vw,260px); gap:clamp(4px,0.8vh,10px); }
+.score-wrap.setup{ width:auto; min-width:230px; gap:8px; }
 .leader-opt{
   display:flex; align-items:center; gap:10px; cursor:pointer;
-  font-size:clamp(15px,2.6vh,26px); color:var(--muted); white-space:nowrap;
+  font-size:24px; color:var(--muted); white-space:nowrap;
 }
 .leader-opt .lbox{
   width:1.1em; height:1.1em; flex:0 0 auto; border-radius:5px;
@@ -184,45 +226,68 @@ body{
 .leader-opt.on .lbox{ background:var(--gold); border-color:var(--gold); }
 
 /* stat cluster */
-.stats{ display:flex; align-items:center; gap:clamp(10px,1.4vw,36px); flex-wrap:wrap; margin-left:auto; }
-.stat{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:clamp(52px,5vw,74px); }
-/* Power sits first, ~20% larger, with a little breathing room before the resources */
-.stat.power-col{ margin-right:clamp(10px,1.6vw,30px); }
-.stat.power-col .snum{ font-size:calc(var(--fs-stat) * 1.2); }
-.stat.power-col .slabel{ font-size:calc(var(--fs-label) * 1.2); }
-.stat .slabel{ font-size:var(--fs-label); text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
-.stat[data-res="material"] .slabel{ color:var(--c-material); }
-.stat[data-res="fuel"]     .slabel{ color:var(--c-fuel); }
-.stat[data-res="relic"]    .slabel{ color:var(--c-relic); }
-.stat[data-res="psionic"]  .slabel{ color:var(--c-psionic); }
+.stats{ display:flex; align-items:center; gap:20px; flex-wrap:nowrap; margin-left:auto; }
 
-/* the number (clean state) — click to edit */
-.snum{ font-size:var(--fs-stat); font-weight:600; cursor:pointer; padding:2px 6px; border-radius:6px; }
-.snum:hover{ background:rgba(255,255,255,.05); }
-
-/* the stepper (revealed state) */
-.stepper{ display:flex; align-items:center; gap:6px; }
-.stepper button{
-  width:var(--btn); height:var(--btn); border-radius:10px; border:1px solid var(--border-strong);
-  background:transparent; color:var(--text); font-size:calc(var(--btn) * .5); line-height:1; cursor:pointer;
-  display:grid; place-items:center;
+/* one stat = white icon on top, translucent number box below */
+.stat{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; flex:0 0 auto; }
+.sicon{ height:var(--icon-h); width:auto; display:block; opacity:var(--icon-op-full); }
+.sbox{
+  min-width:var(--box-w); height:calc(var(--fs-stat) + 10px); padding:0 6px; border-radius:7px;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,var(--box-op-full));
 }
-.stepper button:active{ transform:scale(.92); background:rgba(255,255,255,.06); }
-.stepper .snum{ min-width:1.4em; text-align:center; cursor:pointer; }
+.snum{ font-size:var(--fs-stat); font-weight:600; cursor:pointer; opacity:var(--num-op-full); }
 
-/* city bonus checkboxes */
-.city{ display:flex; flex-direction:column; gap:4px; margin-left:6px; }
-.city label{ display:flex; align-items:center; gap:6px; font-size:var(--fs-label); color:var(--muted); cursor:pointer; }
-.city input{ width:18px; height:18px; accent-color:var(--gold); cursor:pointer; }
+/* fade a resource that the player has none of */
+.stat.empty .sicon{ opacity:var(--icon-op-empty); }
+.stat.empty .sbox{ background:rgba(255,255,255,var(--box-op-empty)); }
+.stat.empty .snum{ opacity:var(--num-op-empty); }
+
+/* Fuel + Material sit close together (they combine for Tycoon) */
+.pair{ display:flex; align-items:center; gap:var(--pair-gap); }
+
+/* the resource group + the white divider between icons and boxes */
+.resgroup{ position:relative; display:flex; align-items:center; gap:var(--res-gap); }
+.resgroup::before{
+  content:""; position:absolute; left:0; right:0; top:calc(var(--icon-h) + 4px); height:2px;
+  background:rgba(255,255,255,var(--divider-op)); pointer-events:none;
+}
+.stat.power-col{ margin-right:6px; }
+
+/* leader asterisk over a reduced-scoring icon */
+.lead-star{ position:absolute; top:-2px; right:6px; color:var(--flip); font-size:20px; font-weight:800; }
+
+/* the stepper (revealed state) — sits inside the number box */
+.stepper{ display:flex; align-items:center; justify-content:center; }
+.stepper button{
+  width:26px; height:26px; border-radius:7px; border:1px solid var(--border-strong);
+  background:var(--panel); color:var(--text); font-size:18px; line-height:1; cursor:pointer;
+  display:grid; place-items:center; flex:0 0 auto; position:relative; z-index:1;
+}
+.stepper button:active{ transform:scale(.9); background:rgba(255,255,255,.08); }
+.stat .stepper .snum{
+  font-size:28px; min-width:auto; margin:0 -8px; padding:0;
+  text-align:center; position:relative; z-index:2; cursor:pointer;
+}
+
+/* +2 / +3 city bonus badges (stacked at the far right) */
+.city-badges{ display:flex; flex-direction:column; align-items:center; gap:6px; margin-left:4px; }
+.city-badge{ height:var(--city-h); width:auto; cursor:pointer; opacity:var(--city-op-off); transition:opacity .12s; }
+.city-badge.on{ opacity:var(--city-op-on); }
 </style>
 </head>
 <body>
-<div id="app">
-  <!-- reserved for later flavor/art -->
-  <div id="flavorTop"><span class="dot"></span>Arcs - Tale of the Fuckin Tape!</div>
+<div id="viewport">
+  <div id="stage">
+    <!-- reserved for later flavor/art -->
+    <div id="flavorTop">
+      <span class="title">Arcs - Tale of the Fuckin Tape!</span>
+      <div id="topButtons"></div>
+    </div>
 
-  <div id="controls"></div>
-  <div id="rows"></div>
+    <div id="controls"></div>
+    <div id="rows"></div>
+  </div>
 </div>
 
 <script>
@@ -275,8 +340,20 @@ const AMBITIONS = [
 ];
 
 /* editable resource stats shown per row (weapon is omitted — scores nothing in 4p) */
-const RES_STATS = ["material","fuel","relic","psionic"];
+const RES_STATS = ["material","fuel","relic","psionic"];   // (used only for the leader-asterisk lookup)
 const OTHER_STATS = ["captives","trophies"];
+
+/* icon art (white PNGs kept in the Arcs_Art folder next to this html) */
+const ART = "Arcs_Art/";
+const ICONS = {
+  power:"power.png",
+  fuel:"fuel.png", material:"material.png",
+  captives:"tyrant.png", trophies:"warlord.png",
+  relic:"keeper.png", psionic:"empath.png",
+  city2:"2_city_bonus.png", city3:"3_city_bonus.png",
+};
+/* order the resource icons appear, left→right (ambition order; Fuel+Material paired) */
+const RES_ORDER = ["fuel","material","captives","trophies","relic","psionic"];
 
 /* which stat column(s) each ambition scores from (Tycoon spans Material + Fuel) */
 const AMBITION_STATS = {
@@ -439,6 +516,7 @@ function sortedOrder(){
    ========================================================================= */
 const $controls = document.getElementById("controls");
 const $rows     = document.getElementById("rows");
+const $top      = document.getElementById("topButtons");
 
 function render(){
   renderControls();
@@ -447,6 +525,14 @@ function render(){
 }
 
 function renderControls(){
+  // Export + New game / Start live in the title row now
+  $top.innerHTML = `
+    <button class="btn" data-act="csv">Export</button>
+    ${state.setup
+      ? `<button class="btn" data-act="start">Start game</button>`
+      : `<button class="btn" data-act="reset">New game</button>`}
+  `;
+
   const initDots = state.players.map(p =>
     `<span class="init-dot ${state.initiative===p.id?'on':''}" data-act="init" data-pid="${p.id}"
            style="background:${p.color}" title="${p.name} has initiative"></span>`
@@ -461,40 +547,42 @@ function renderControls(){
             </span>`;
   }).join("");
 
+  // chapter: click the number to reveal −/+ (like the stat steppers)
+  const editingChap = state.editing && state.editing.chapter;
+  const chapterCtrl = editingChap
+    ? `<span class="chapter-stepper">
+         <button class="mini" data-act="chap" data-d="-1">−</button>
+         <span class="chapter-val" data-act="editchap">${state.chapter} / 5</span>
+         <button class="mini" data-act="chap" data-d="1">+</button>
+       </span>`
+    : `<span class="chapter-val" data-act="editchap">${state.chapter} / 5</span>`;
+
   $controls.innerHTML = `
     <div class="ctrl-group">
       <span class="ctrl-label">Chapter</span>
-      <button class="mini" data-act="chap" data-d="-1">−</button>
-      <span class="chapter-val">${state.chapter} / 5</span>
-      <button class="mini" data-act="chap" data-d="1">+</button>
+      ${chapterCtrl}
     </div>
     <div class="ctrl-group">
-      <span class="ctrl-label">Initiative</span>
-      <span class="init-dots">${initDots}</span>
+      <span class="init-dots" title="Initiative">${initDots}</span>
     </div>
     <div class="ctrl-group amb-chips">${chips}</div>
-    <span class="spacer"></span>
-    <button class="btn" data-act="csv">Export</button>
-    ${state.setup
-      ? `<button class="btn" data-act="start">Start game</button>`
-      : `<button class="btn" data-act="reset">New game</button>`}
   `;
 }
 
 function statCell(p, stat){
   const editing = state.editing && state.editing.pid===p.id && state.editing.stat===stat;
-  const res = RES_STATS.includes(stat) ? stat : "";
-  const label = stat.charAt(0).toUpperCase()+stat.slice(1);
-  const star = leaderStar(p, stat) ? `<sup class="lead-star">*</sup>` : "";
-  const num = editing
+  const star = leaderStar(p, stat) ? `<span class="lead-star">*</span>` : "";
+  const empty = (stat!=="power") && p[stat]===0;   // resources fade to almost nothing at 0
+  const inner = editing
     ? `<div class="stepper">
          <button data-act="dec" data-pid="${p.id}" data-stat="${stat}">−</button>
          <span class="snum" data-act="edit" data-pid="${p.id}" data-stat="${stat}">${p[stat]}</span>
          <button data-act="inc" data-pid="${p.id}" data-stat="${stat}">+</button>
        </div>`
     : `<span class="snum" data-act="edit" data-pid="${p.id}" data-stat="${stat}">${p[stat]}</span>`;
-  return `<div class="stat ${stat==='power'?'power-col':''}" data-res="${res}">
-            <span class="slabel">${label}${star}</span>${num}
+  return `<div class="stat ${stat==='power'?'power-col':''} ${empty?'empty':''}" data-res="${stat}">
+            <img class="sicon" src="${ART}${ICONS[stat]}" alt="${stat}">${star}
+            <div class="sbox">${inner}</div>
           </div>`;
 }
 
@@ -518,9 +606,9 @@ function renderRows(){
         ${leaderName ? `<span class="leader-tag">${leaderName}</span>` : ""}
       </div>`;
 
-    const powerCell = statCell(p, "power");                 // Power sits first
-    const resCells = RES_STATS.map(s=>statCell(p,s)).join("");
-    const otherCells = OTHER_STATS.map(s=>statCell(p,s)).join("");
+    const powerCell = statCell(p, "power");                 // Power sits first (never fades)
+    const pair = `<div class="pair">${statCell(p,"fuel")}${statCell(p,"material")}</div>`;
+    const restCells = ["captives","trophies","relic","psionic"].map(s=>statCell(p,s)).join("");
 
     const rowStyle = `--pc:${p.color}${p.img?`;--img:url('${p.img}')`:''}`;
     const imgClass = p.img ? "has-img" : "";
@@ -537,14 +625,19 @@ function renderRows(){
            <span class="score-sub">${m[p.id].ambPts?`+${m[p.id].ambPts} `:''}</span>
          </div>`;
 
+    const cityBadge = (slot)=>`<img class="city-badge ${p[slot]?'on':''}" data-act="city"
+        data-pid="${p.id}" data-slot="${slot}" src="${ART}${ICONS[slot]}" alt="${slot}">`;
+
     const statsBlock = state.setup ? "" : `
         <div class="stats">
           ${powerCell}
-          ${resCells}
-          ${otherCells}
-          <div class="city">
-            <label><input type="checkbox" data-act="city" data-pid="${p.id}" data-slot="city2" ${p.city2?'checked':''}> +2 city</label>
-            <label><input type="checkbox" data-act="city" data-pid="${p.id}" data-slot="city3" ${p.city3?'checked':''}> +3 city</label>
+          <div class="resgroup">
+            ${pair}
+            ${restCells}
+          </div>
+          <div class="city-badges">
+            ${cityBadge("city2")}
+            ${cityBadge("city3")}
           </div>
         </div>`;
 
@@ -568,16 +661,12 @@ function focusNameIfEditing(){
    EVENTS  (one delegated click handler + a couple of specifics)
    ========================================================================= */
 document.addEventListener("click", e=>{
-  // City checkboxes: let the browser toggle them and let 'change' do the work.
-  // (Rendering here would replace the checkbox before it finishes toggling.)
-  if(e.target.closest(".city")){ closeEdit(); return; }
-
   const t = e.target.closest("[data-act]");
   const act = t ? t.dataset.act : null;
 
   // Re-sort only when the click lands OUTSIDE the steppers (not on +/- and not on
   // another number). This lets you keep adjusting values without the row sliding away.
-  if(state.editing && act!=="inc" && act!=="dec" && act!=="edit"){ closeEdit(); }
+  if(state.editing && act!=="inc" && act!=="dec" && act!=="edit" && act!=="chap" && act!=="editchap"){ closeEdit(); }
   if(!t){ render(); return; }
 
   const pid  = t.dataset.pid;
@@ -586,7 +675,11 @@ document.addEventListener("click", e=>{
 
   switch(act){
     case "chap":
-      changeChapter(parseInt(t.dataset.d,10)); return;   // handles its own render
+      changeChapter(parseInt(t.dataset.d,10)); return;   // keeps the chapter stepper open
+    case "editchap":
+      // toggle the chapter's −/+ (like clicking a stat number)
+      state.editing = (state.editing && state.editing.chapter) ? null : { chapter:true };
+      render(); return;
     case "init":
       state.initiative = pid; snapshot("initiative"); render(); return;   // log on initiative
     case "amb":
@@ -607,6 +700,9 @@ document.addEventListener("click", e=>{
       lp.leader = (lp.leader === t.dataset.leader) ? null : t.dataset.leader;
       save(); render(); return;
     }
+    case "city":                                      // toggle a city bonus badge
+      P(pid)[t.dataset.slot] = !P(pid)[t.dataset.slot];
+      save(); render(); return;
     case "start":                                     // leave setup, begin the game
       state.setup = false; state.order = sortedOrder(); save(); render(); return;
     case "csv":  exportCSV();  return;
@@ -617,15 +713,6 @@ document.addEventListener("click", e=>{
 
 // close the open stepper AND unfreeze the sort order
 function closeEdit(){ state.editing = null; state.order = sortedOrder(); }
-
-// checkbox toggles (fire on change, not click)
-document.addEventListener("change", e=>{
-  const t = e.target.closest('input[data-act="city"]');
-  if(!t) return;
-  const p = state.players.find(x=>x.id===t.dataset.pid);
-  p[t.dataset.slot] = t.checked;
-  save(); render();
-});
 
 // commit name edit on Enter / blur
 document.addEventListener("keydown", e=>{
@@ -729,8 +816,24 @@ function resetGame(){
   save(); render();
 }
 
+/* =========================================================================
+   FIT TO SCREEN  —  scale the fixed 1180×820 stage to fill the real viewport.
+   This is what makes the iPad and any desktop window look identical.
+   ========================================================================= */
+const STAGE_W = 1180, STAGE_H = 820;
+function fitStage(){
+  const vw = (window.visualViewport && window.visualViewport.width)  || window.innerWidth;
+  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  const s = Math.min(vw / STAGE_W, vh / STAGE_H);
+  document.getElementById("stage").style.transform = `scale(${s})`;
+}
+window.addEventListener("resize", fitStage);
+window.addEventListener("orientationchange", fitStage);
+if(window.visualViewport) window.visualViewport.addEventListener("resize", fitStage);
+
 /* go */
 render();
+fitStage();
 </script>
 </body>
 </html>
