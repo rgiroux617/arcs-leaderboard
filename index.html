@@ -44,7 +44,7 @@
   --fs-sub:    46px;   /* the "+N" ambition line under the score */
 
   /* fun, bold title (Apple systems have Marker Felt / Chalkboard SE; swap freely) */
-  --title-font: "Marker Felt", "Chalkboard SE", "Comic Sans MS", system-ui, sans-serif;
+  --title-font: "Marker Felt", "Impact", "Comic Sans MS", system-ui, sans-serif;
   --fs-title:   38px;
   --fs-chapter: 44px;  /* the big chapter number */
   --fs-chip:    20px;  /* ambition button text */
@@ -57,11 +57,11 @@
   --stat-w:   80px;    /* width of each stat column */
 
   /* ---- resource icons + number boxes (the new banner-style display) ---- */
-  --icon-h:      36px;   /* height of each white resource icon */
+  --icon-h:      48px;   /* height of each white resource icon */
   --box-w:       52px;   /* width of a number box */
   --res-gap:     26px;   /* gap between resource columns */
   --pair-gap:    8px;    /* tighter gap between Fuel and Material (they share Tycoon) */
-  --city-h:      44px;   /* size of the +2 / +3 city badges */
+  --city-h:      54px;   /* size of the +2 / +3 city badges */
   --divider-op:  0.45;   /* the white line between icons and number boxes */
 
   /* fade when a player has NONE of an item (icon + box + number nearly vanish) */
@@ -226,10 +226,10 @@ body{
 .leader-opt.on .lbox{ background:var(--gold); border-color:var(--gold); }
 
 /* stat cluster */
-.stats{ display:flex; align-items:center; gap:20px; flex-wrap:nowrap; margin-left:auto; }
+.stats{ display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:nowrap; flex:1 1 auto; }
 
 /* one stat = white icon on top, translucent number box below */
-.stat{ position:relative; display:flex; flex-direction:column; align-items:center; gap:5px; flex:0 0 auto; }
+.stat{ position:relative; display:flex; flex-direction:column; align-items:center; gap:12px; flex:0 0 auto; }
 .sicon{ height:var(--icon-h); width:auto; display:block; opacity:var(--icon-op-full); }
 .sbox{
   min-width:var(--box-w); height:calc(var(--fs-stat) + 10px); padding:0 6px; border-radius:7px;
